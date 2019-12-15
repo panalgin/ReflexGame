@@ -5,6 +5,7 @@
 #define LCD_I2C_ADDR 0x27
 #define LCD_COLS 20
 #define LCD_ROWS 4
+#define LCD_REFRESH_INTERVAL 300
 #define PREGAME_COUNTER 9
 
 /* #region State Machine */
@@ -30,15 +31,19 @@ GameState State;
 bool screenNeedsUpdate = false;
 uint8_t pregameCounter, oldPregameCounter = 0;
 
+unsigned long gameTime, oldGameTime = 0;
+
 void watermark();
 void checkState();
 void checkInput();
 void showScores();
 void showPregame();
+void showGame();
 void startCountdown();
 void startGame();
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]);
-void setupTimer();
+void setupTimer1();
+void setupTimer2();
 void partialUpdates();
 
 void setup()
@@ -56,7 +61,9 @@ void setup()
   lcd.clear();
   lcd.setCursor(0, 0);
 
-  setupTimer();
+  setupTimer1();
+  setupTimer2();
+
   watermark();
 
   screenNeedsUpdate = true;
@@ -98,31 +105,45 @@ void checkState()
 {
   switch (State)
   {
-  case GameState::None:
-  {
-    if (screenNeedsUpdate)
+    case GameState::None:
     {
-      showScores();
-      screenNeedsUpdate = false;
+      if (screenNeedsUpdate)
+      {
+        showScores();
+        screenNeedsUpdate = false;
+      }
+
+      break;
+    }
+    case GameState::Pregame:
+    {
+      if (screenNeedsUpdate)
+      {
+        showPregame();
+        screenNeedsUpdate = false;
+      }
+
+      break;
     }
 
-    break;
-  }
-  case GameState::Pregame:
-  {
-    if (screenNeedsUpdate)
-    {
-      showPregame();
-      screenNeedsUpdate = false;
-      Serial.println(screenNeedsUpdate);
-    }
+    case GameState::Running: {
+      if (screenNeedsUpdate) {
+        showGame();
+        screenNeedsUpdate = false;
+      }
 
-    break;
-  }
+      break;
+    }
   }
 
   if (pregameCounter != oldPregameCounter) {
     oldPregameCounter = pregameCounter;
+
+    partialUpdates();
+  }
+  else if (gameTime - oldGameTime > LCD_REFRESH_INTERVAL) {
+    oldGameTime = gameTime;
+    
     partialUpdates();
   }
 }
@@ -131,15 +152,15 @@ void checkInput()
 {
   switch (State)
   {
-  case GameState::None:
-  {
-    uint8_t buttonState = digitalRead(buttonPin);
+    case GameState::None:
+    {
+      uint8_t buttonState = digitalRead(buttonPin);
 
-    if (buttonState == LOW)
-      startCountdown();
+      if (buttonState == LOW)
+        startCountdown();
 
-    break;
-  }
+      break;
+    }
   }
 }
 
@@ -163,6 +184,16 @@ void showPregame()
                                         {"Led kirmizi olunca  "},
                                         {"birakin, yesil olun-"},
                                         {"ca basin.        5sn"}};
+
+  printWithAnimation(lines);
+}
+
+void showGame()
+{
+  char lines[LCD_ROWS][LCD_COLS + 1] = {{"Sure: 00:00.000     "},
+                                        {"Basma Tepki: 23ms   "},
+                                        {"Birakma Tep: 23ms   "},
+                                        {"Deneme: 1/10        "}};
 
   printWithAnimation(lines);
 }
@@ -195,7 +226,32 @@ void startGame()
   screenNeedsUpdate = true;
 }
 
-void setupTimer()
+void partialUpdates()
+{
+  if (screenNeedsUpdate == false)
+  {
+    if (State == GameState::Pregame)
+    {
+      lcd.setCursor(17, 3);
+      lcd.print(pregameCounter);
+      lcd.print("sn");
+    }
+    else if (State == GameState::Running)
+    {
+      lcd.setCursor(6, 0);
+      char text[21];
+      uint16_t min = gameTime / 1000 / 60;
+      uint16_t sec = (gameTime / 1000) % 60;
+      uint16_t mil = gameTime % 1000;
+
+      sprintf(text, "%02d:%02d.%03d", min, sec, mil);
+
+      lcd.print(text);
+    }
+  }
+}
+
+void setupTimer1()
 {
   noInterrupts();
   // Clear registers
@@ -214,6 +270,25 @@ void setupTimer()
   interrupts();
 }
 
+void setupTimer2()
+{
+  noInterrupts();
+  // Clear registers
+  TCCR2A = 0;
+  TCCR2B = 0;
+  TCNT2 = 0;
+
+  // 500 Hz (16000000/((124+1)*256))
+  OCR2A = 124;
+  // CTC
+  TCCR2A |= (1 << WGM21);
+  // Prescaler 256
+  TCCR2B |= (1 << CS22) | (1 << CS21);
+  // Output Compare Match A Interrupt Enable
+  TIMSK2 |= (1 << OCIE2A);
+  interrupts();
+}
+
 ISR(TIMER1_COMPA_vect)
 {
   if (State == GameState::Pregame)
@@ -226,15 +301,9 @@ ISR(TIMER1_COMPA_vect)
   }
 }
 
-void partialUpdates()
+ISR(TIMER2_COMPA_vect)
 {
-  if (screenNeedsUpdate == false)
-  {
-    if (State == GameState::Pregame)
-    {
-      lcd.setCursor(17, 3);
-      lcd.print(pregameCounter);
-      lcd.print("sn");
-    }
+  if (State == GameState::Running) {
+    gameTime += 2;
   }
 }
