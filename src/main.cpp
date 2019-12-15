@@ -36,6 +36,7 @@ unsigned long gameTime, oldGameTime = 0;
 void watermark();
 void checkState();
 void checkInput();
+void checkLed();
 void showScores();
 void showPregame();
 void showGame();
@@ -132,6 +133,8 @@ void checkState()
         screenNeedsUpdate = false;
       }
 
+      checkLed();
+
       break;
     }
   }
@@ -164,12 +167,26 @@ void checkInput()
   }
 }
 
+bool isLedOn = false;
+
+void checkLed() {
+  if (!isLedOn) {
+     // turn on red, wait button press
+  }
+
+  // check if button is pressed, record start - button press
+
+  // if releases button, fails
+  // after a random time, stop led, record time
+  // c
+}
+
 void showScores()
 {
   char lines[LCD_ROWS][LCD_COLS + 1] = {{"   -SKOR TABLOSU-   "},
-                                        {"1: 0023 ms          "},
-                                        {"2: 0035 ms          "},
-                                        {"3: 0250 ms          "}};
+                                        {"1: 0000 ms          "},
+                                        {"2: 0000 ms          "},
+                                        {"3: 0000 ms          "}};
 
   /*sprintf(lines[1], "TIME:       00:%02d:%02d", bombCountdownTime / 60,
           bombCountdownTime % 60);
@@ -191,8 +208,8 @@ void showPregame()
 void showGame()
 {
   char lines[LCD_ROWS][LCD_COLS + 1] = {{"Sure: 00:00.000     "},
-                                        {"Basma Tepki: 23ms   "},
-                                        {"Birakma Tep: 23ms   "},
+                                        {"Basma Tepki: 0ms    "},
+                                        {"Birakma Tep: 0ms    "},
                                         {"Deneme: 1/10        "}};
 
   printWithAnimation(lines);
