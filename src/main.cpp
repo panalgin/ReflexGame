@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
+#include <EepromAnything.h>
 
 #define LCD_I2C_ADDR 0x27
 #define LCD_COLS 20
@@ -27,5 +28,5 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
-  
+
 }
