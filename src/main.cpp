@@ -6,7 +6,7 @@
 #define LCD_COLS 20
 #define LCD_ROWS 4
 #define LCD_REFRESH_INTERVAL 300
-#define PREGAME_COUNTER 9
+#define PREGAME_COUNTER 4
 
 /* #region State Machine */
 enum class GameState
@@ -32,6 +32,10 @@ bool screenNeedsUpdate = false;
 uint8_t pregameCounter, oldPregameCounter = 0;
 
 unsigned long gameTime, oldGameTime = 0;
+unsigned long gameStartedAt, lastHitAt, pressReactTime, oldPressReactTime = 0;
+
+unsigned long userShouldPressAt = 0;
+bool userShouldPress = false;
 
 void watermark();
 void checkState();
@@ -46,6 +50,7 @@ void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]);
 void setupTimer1();
 void setupTimer2();
 void partialUpdates();
+void showLed(uint8_t red, uint8_t green, uint8_t blue);
 
 void setup()
 {
@@ -55,7 +60,9 @@ void setup()
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
 
-  pinMode(buttonPin, INPUT_PULLUP);
+  showLed(0, 0, 0);
+
+  pinMode(buttonPin, INPUT);
 
   lcd.init();
   lcd.backlight();
@@ -151,6 +158,9 @@ void checkState()
   }
 }
 
+
+bool hasHit = false;
+
 void checkInput()
 {
   switch (State)
@@ -159,21 +169,56 @@ void checkInput()
     {
       uint8_t buttonState = digitalRead(buttonPin);
 
-      if (buttonState == LOW)
+      if (buttonState == HIGH)
         startCountdown();
 
       break;
     }
+    case GameState::Running: {
+      uint8_t buttonState = digitalRead(buttonPin);
+
+      // supposed to press and never pressed
+      if (buttonState == HIGH && hasHit == false && userShouldPress == true) {
+        showLed(0, 255, 0);
+        hasHit = true;
+        lastHitAt = millis();
+
+        pressReactTime = lastHitAt - (gameStartedAt + userShouldPressAt);
+      }
+
+      // on release after a successfull press
+      if (buttonState == LOW && hasHit == true) {
+        hasHit = false;
+        gameTime = 0;
+        gameStartedAt = millis();
+        userShouldPress = false;
+        userShouldPressAt = random(3, 10) * 1000;
+      }
+    }
   }
 }
 
-bool isLedOn = false;
+unsigned long lastBlinkedAt = 0;
+uint8_t currentRed = 0;
 
 void checkLed() {
-  if (!isLedOn) {
-     // turn on red, wait button press
-  }
+  if (!userShouldPress) {
+    if (millis() - lastBlinkedAt > 100) {
+      lastBlinkedAt = millis();
 
+      if (currentRed == 255)
+        currentRed = 0;
+      else
+        currentRed = 255;
+      
+      showLed(currentRed, 0, 0);
+    }
+  }
+  
+  if (userShouldPressAt < gameTime && userShouldPress == false) {
+    userShouldPress = true;
+    showLed(0, 0, 255);
+  }
   // check if button is pressed, record start - button press
 
   // if releases button, fails
@@ -199,8 +244,8 @@ void showPregame()
 {
   char lines[LCD_ROWS][LCD_COLS + 1] = {{"   - HAZIRLANIN -   "},
                                         {"Led kirmizi olunca  "},
-                                        {"birakin, yesil olun-"},
-                                        {"ca basin.        5sn"}};
+                                        {"basin, mavi olunca  "},
+                                        {"birakin          5sn"}};
 
   printWithAnimation(lines);
 }
@@ -241,6 +286,13 @@ void startGame()
 {
   State = GameState::Running;
   screenNeedsUpdate = true;
+
+  showLed(255, 0, 0);
+  gameStartedAt = millis();
+  userShouldPressAt = random(3, 10) * 1000;
+
+  Serial.print("Should Press At: ");
+  Serial.println(userShouldPressAt);
 }
 
 void partialUpdates()
@@ -264,9 +316,24 @@ void partialUpdates()
       sprintf(text, "%02d:%02d.%03d", min, sec, mil);
 
       lcd.print(text);
+
+      if (pressReactTime != oldPressReactTime) {
+        oldPressReactTime = pressReactTime;
+
+        lcd.setCursor(13, 1);
+        lcd.print(pressReactTime);
+        lcd.print("ms");
+      }
     }
   }
 }
+
+void showLed(uint8_t red, uint8_t green, uint8_t blue) {
+  analogWrite(redPin, 255 - red);
+  analogWrite(greenPin, 255 - green);
+  analogWrite(bluePin, 255 - blue);
+}
+
 
 void setupTimer1()
 {
