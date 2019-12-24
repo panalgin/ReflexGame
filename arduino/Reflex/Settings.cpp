@@ -7,92 +7,53 @@ Settings::Settings() {}
 /*
  * Reads and loads setting values from the eeprom
  */
-uint8_t Settings::Load(void)
-{
-  EEPROM_readAnything(0, EepromBlock);
+uint8_t Settings::Load(void) {
+    EEPROM_readAnything(0, EepromBlock);
 
-  if (strcmp(this->EepromBlock.Version, "123") != 0)
-  {
-    strcpy(this->EepromBlock.Version, "123");
+    if (strcmp(this->EepromBlock.Version, "123") != 0) {
+        strcpy(this->EepromBlock.Version, "123");
+        this->EepromBlock.Scores[0] = 0;
+        this->EepromBlock.Scores[1] = 0;
+        this->EepromBlock.Scores[2] = 0;
 
-    EEPROM_writeAnything(0, this->EepromBlock);
-  }
+        EEPROM_writeAnything(0, this->EepromBlock);
+    }
 
 #ifdef _DEBUG
-  //Print eeprom values
+    // Print eeprom values
 #endif
 
-  return 0;
+    return 0;
 }
 
-uint8_t Settings::Save(void)
-{
-  if (this->IsModified)
-  {
-    this->IsModified = false;
+uint8_t Settings::Save(void) {
+    if (this->IsModified) {
+        this->IsModified = false;
 
-    EEPROM_writeAnything(0, this->EepromBlock);
-  }
+        EEPROM_writeAnything(0, this->EepromBlock);
+    }
 
-  return 0;
+    return 0;
 }
 
-bool Settings::SetValue(uint8_t index, char *value)
-{
-  uint16_t iValue = index == 3 ? strlen(value) : (uint16_t)atol(value); // If the property is bombpassword, we only check the length
+void Settings::Assert(unsigned long avgScore) {
+  for(uint8_t i = 0; i < 3; i++) {
+    unsigned long old = this->EepromBlock.Scores[i];
 
-  if (iValue < this->PropertyLimits[index][0])
-  {
-    this->LastErrorCode = 2; // Value was smaller than minimum allowed
-    return false;
-  }
-  else if (iValue > this->PropertyLimits[index][1])
-  {
-    this->LastErrorCode = 1; // Value was bigger than maximum allowed
-    return false;
-  }
-  else
-  {
-    this->SetValueRaw(index, value);
-    this->LastErrorCode = 0;
-    return true;
-  }
-}
+    if (avgScore < old || old == 0) {
+      this->EepromBlock.Scores[i] = avgScore;
+      this->IsModified = true;
 
-/// Gets screen-friendly value of the given parameter by order in EepromBlock
-char *Settings::GetValue(uint8_t index)
-{
-  char *result = (char *)malloc(sizeof(char) * 14);
+      if (i == 0) {
+        unsigned long secondOld = this->EepromBlock.Scores[1];
 
-  switch (index)
-  {
-  case 0:
-    sprintf(result, "%u secs", this->EepromBlock.DominationGameDuration);
+        this->EepromBlock.Scores[1] = old;
+        this->EepromBlock.Scores[2] = secondOld;
+      }
+      else if (i == 1)
+        this->EepromBlock.Scores[2] = old;
 
-    break;
-
-  default:
-    strcpy(result, "Error");
-
-    break;
-  }
-
-  return result;
-}
-
-void Settings::SetValueRaw(uint8_t index, char *value)
-{
-  this->IsModified = true;
-
-  uint16_t iValue = (uint16_t)atol(value);
-
-  switch (index)
-  {
-  case 0:
-    this->EepromBlock.DominationGameDuration = iValue;
-    break;
-
-  default:
-    break;
+      break;
+    }
   }
 }
