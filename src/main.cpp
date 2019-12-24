@@ -33,6 +33,7 @@ unsigned long gameStartedAt, lastHitAt, pressReactTime, oldPressReactTime,
 uint8_t session, oldSession = 1;
 
 unsigned long userShouldPressAt = 0;
+unsigned long totalScore = 0;
 bool userShouldPress = false;
 
 void watermark();
@@ -49,6 +50,8 @@ void setupTimer1();
 void setupTimer2();
 void partialUpdates();
 void showLed(uint8_t red, uint8_t green, uint8_t blue);
+void endGame();
+void showEnd();
 
 void setup() {
     Serial.begin(115200);
@@ -129,6 +132,14 @@ void checkState() {
 
             break;
         }
+        case GameState::End: {
+            if (screenNeedsUpdate) {
+                showEnd();
+                screenNeedsUpdate = false;
+            }
+
+            break;
+        }
     }
 
     if (pregameCounter != oldPregameCounter) {
@@ -143,6 +154,7 @@ void checkState() {
 }
 
 bool hasHit = false;
+bool canHit = true;
 
 void checkInput() {
     switch (State) {
@@ -153,39 +165,55 @@ void checkInput() {
 
             break;
         }
+        case GameState::Pregame:
+            break;
         case GameState::Running: {
             uint8_t buttonState = digitalRead(buttonPin);
 
             // supposed to press and never pressed
-            if (buttonState == HIGH && hasHit == false &&
-                userShouldPress == true) {
-                showLed(0, 255, 0);
-                hasHit = true;
-                lastHitAt = millis();
+            if (canHit == true && buttonState == HIGH && hasHit == false) {
+                canHit = false; // can't rehit before releasing
 
-                pressReactTime =
-                    lastHitAt - (gameStartedAt + userShouldPressAt);
+                if (userShouldPress) {
+                    showLed(0, 255, 0);
+                    hasHit = true;
+                    lastHitAt = millis();
 
-                if (pressReactTime < bestScore || bestScore == 0)
-                    bestScore = pressReactTime;
+                    pressReactTime =
+                        lastHitAt - (gameStartedAt + userShouldPressAt);
+
+                    if (pressReactTime < bestScore || bestScore == 0)
+                        bestScore = pressReactTime;
+
+                    totalScore += pressReactTime;
+                }
+                else { // user might be pressing randomly, so give penalty to prevent accidental quick reaction
+                  userShouldPressAt += 1000;
+                }
             }
 
             // on release after a successfull press
-            if (buttonState == LOW && hasHit == true) {
-                if (session == 10) {  // finish game
+            if (buttonState == LOW) {
+                canHit = true;  // can re-hit after this
 
-                } else {
-                    hasHit = false;
-                    gameTime = 0;
-                    gameStartedAt = millis();
-                    userShouldPress = false;
-                    userShouldPressAt = random(3, 5) * random(1000, 2000);
-                    session++;
+                if (hasHit) {             // was a successfull button press
+                    if (session == 10) {  // finish game
+                        endGame();
+                    } else {
+                        hasHit = false;
+                        gameTime = 0;
+                        gameStartedAt = millis();
+                        userShouldPress = false;
+                        userShouldPressAt = random(3, 5) * random(1000, 2000);
+                        session++;
+                    }
                 }
             }
 
             break;
         }
+        case GameState::End:
+            break;
     }
 }
 
@@ -248,13 +276,31 @@ void showGame() {
     printWithAnimation(lines);
 }
 
+void showEnd() {
+    char lines[LCD_ROWS][LCD_COLS + 1] = {{"---  TEBRIKLER   ---"},
+                                          {"En iyi skor: 0ms    "},
+                                          {"Ortalamaniz: 0ms    "},
+                                          {"Skorunuz kaydedildi "}};
+
+    sprintf(lines[1], "En iyi skor: %ums", (uint16_t)bestScore);
+    sprintf(lines[2], "Ortalamaniz: %ums", (uint16_t)(totalScore / 10));
+
+    printWithAnimation(lines);
+}
+
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
     lcd.clear();
 
     for (uint8_t row = 0; row < LCD_ROWS; row++) {
         for (uint8_t col = 0; col < LCD_COLS; col++) {
             lcd.setCursor(col, row);
-            lcd.print(bucket[row][col]);
+            char c = bucket[row][col];
+
+            if (c != '\0')
+                lcd.print(bucket[row][col]);
+            else
+                lcd.print(' ');
+
             delay(1);
         }
     }
@@ -277,6 +323,13 @@ void startGame() {
     Serial.print("Should Press At: ");
     Serial.println(userShouldPressAt);
     session = 1;
+}
+
+void endGame() {
+    State = GameState::End;
+    screenNeedsUpdate = true;
+    showLed(255, 255, 0);
+    gameTime = 0;
 }
 
 void partialUpdates() {
@@ -370,7 +423,6 @@ void setupTimer2() {
 ISR(TIMER1_COMPA_vect) {
     if (State == GameState::Pregame) {
         if (pregameCounter > 0) pregameCounter--;
-
         if (pregameCounter == 0) startGame();
     }
 }
