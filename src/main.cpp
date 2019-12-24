@@ -1,12 +1,13 @@
 #include <Arduino.h>
 #include <EepromAnything.h>
 #include <LiquidCrystal_I2C.h>
+#include "Settings.h"
 
 #define LCD_I2C_ADDR 0x27
 #define LCD_COLS 20
 #define LCD_ROWS 4
 #define LCD_REFRESH_INTERVAL 300
-#define PREGAME_COUNTER 4
+#define PREGAME_COUNTER 9
 
 /* #region State Machine */
 enum class GameState { None, Pregame, Running, End };
@@ -14,7 +15,7 @@ enum class GameState { None, Pregame, Running, End };
 LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 char brandFirst[LCD_COLS + 1] = "    REFLEX OYUNU    ";
-char brandSecond[LCD_COLS + 1] = "      v: 0.92b      ";
+char brandSecond[LCD_COLS + 1] = "      v: 0.99c      ";
 
 const uint8_t redPin = 6;
 const uint8_t greenPin = 5;
@@ -23,6 +24,8 @@ const uint8_t bluePin = 3;
 const uint8_t buttonPin = 8;
 
 GameState State;
+Settings settings;
+
 bool screenNeedsUpdate = false;
 uint8_t pregameCounter, oldPregameCounter = 0;
 
@@ -52,6 +55,7 @@ void partialUpdates();
 void showLed(uint8_t red, uint8_t green, uint8_t blue);
 void endGame();
 void showEnd();
+void resetGame();
 
 void setup() {
     Serial.begin(115200);
@@ -75,6 +79,7 @@ void setup() {
     watermark();
 
     screenNeedsUpdate = true;
+    settings.Load();
 }
 
 void loop() {
@@ -172,7 +177,7 @@ void checkInput() {
 
             // supposed to press and never pressed
             if (canHit == true && buttonState == HIGH && hasHit == false) {
-                canHit = false; // can't rehit before releasing
+                canHit = false;  // can't rehit before releasing
 
                 if (userShouldPress) {
                     showLed(0, 255, 0);
@@ -186,9 +191,9 @@ void checkInput() {
                         bestScore = pressReactTime;
 
                     totalScore += pressReactTime;
-                }
-                else { // user might be pressing randomly, so give penalty to prevent accidental quick reaction
-                  userShouldPressAt += 1000;
+                } else {  // user might be pressing randomly, so give penalty to
+                          // prevent accidental quick reaction
+                    userShouldPressAt += 1000;
                 }
             }
 
@@ -204,7 +209,7 @@ void checkInput() {
                         gameTime = 0;
                         gameStartedAt = millis();
                         userShouldPress = false;
-                        userShouldPressAt = random(3, 5) * random(1000, 2000);
+                        userShouldPressAt = random(2, 5) * random(1000, 2000);
                         session++;
                     }
                 }
@@ -212,8 +217,13 @@ void checkInput() {
 
             break;
         }
-        case GameState::End:
+        case GameState::End: {
+            uint8_t buttonState = digitalRead(buttonPin);
+
+            if (buttonState == HIGH) resetGame();
+
             break;
+        }
     }
 }
 
@@ -222,13 +232,13 @@ uint8_t currentRed = 0;
 
 void checkLed() {
     if (!userShouldPress) {
-        if (millis() - lastBlinkedAt > 100) {
+        if (millis() - lastBlinkedAt > 50) {
             lastBlinkedAt = millis();
 
-            if (currentRed == 255)
+            if (currentRed == 100)
                 currentRed = 0;
             else
-                currentRed = 255;
+                currentRed = 100;
 
             showLed(currentRed, 0, 0);
         }
@@ -247,22 +257,30 @@ void checkLed() {
 
 void showScores() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"   -SKOR TABLOSU-   "},
-                                          {"1: 0000 ms          "},
-                                          {"2: 0000 ms          "},
-                                          {"3: 0000 ms          "}};
+                                          {"1:                  "},
+                                          {"2:                  "},
+                                          {"3:                  "}};
 
     /*sprintf(lines[1], "TIME:       00:%02d:%02d", bombCountdownTime / 60,
             bombCountdownTime % 60);
     sprintf(lines[2], "CODE:        %s", bombPassword);*/
+
+    unsigned long first = settings.EepromBlock.Scores[0];
+    unsigned long second = settings.EepromBlock.Scores[1];
+    unsigned long third = settings.EepromBlock.Scores[2];
+
+    sprintf(lines[1], "1: %u ms", (uint16_t)first);
+    sprintf(lines[2], "2: %u ms", (uint16_t)second);
+    sprintf(lines[3], "3: %u ms", (uint16_t)third);
 
     printWithAnimation(lines);
 }
 
 void showPregame() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"   - HAZIRLANIN -   "},
-                                          {"Led kirmizi olunca  "},
-                                          {"basin, mavi olunca  "},
-                                          {"birakin          5sn"}};
+                                          {"Led mavi renk oldu -"},
+                                          {"gunda, hemen basin  "},
+                                          {"Baslamaya:       5sn"}};
 
     printWithAnimation(lines);
 }
@@ -282,10 +300,17 @@ void showEnd() {
                                           {"Ortalamaniz: 0ms    "},
                                           {"Skorunuz kaydedildi "}};
 
+    unsigned long avgScore = totalScore / 10;
+
     sprintf(lines[1], "En iyi skor: %ums", (uint16_t)bestScore);
-    sprintf(lines[2], "Ortalamaniz: %ums", (uint16_t)(totalScore / 10));
+    sprintf(lines[2], "Ortalamaniz: %ums", (uint16_t)avgScore);
 
     printWithAnimation(lines);
+
+    settings.Assert(avgScore);
+    settings.Save();
+
+    delay(3000);
 }
 
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
@@ -301,7 +326,7 @@ void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
             else
                 lcd.print(' ');
 
-            delay(1);
+            delayMicroseconds(500);
         }
     }
 }
@@ -317,12 +342,11 @@ void startGame() {
     screenNeedsUpdate = true;
 
     showLed(255, 0, 0);
-    gameStartedAt = millis();
-    userShouldPressAt = random(3, 5) * random(1000, 2000);
-
-    Serial.print("Should Press At: ");
-    Serial.println(userShouldPressAt);
     session = 1;
+
+    delay(500);
+    gameStartedAt = millis();
+    userShouldPressAt = random(2, 5) * random(1000, 2000);
 }
 
 void endGame() {
@@ -330,6 +354,19 @@ void endGame() {
     screenNeedsUpdate = true;
     showLed(255, 255, 0);
     gameTime = 0;
+}
+
+void resetGame() {
+    State = GameState::None;
+    screenNeedsUpdate = true;
+    showLed(0, 0, 0);
+    bestScore = 0;
+    totalScore = 0;
+    canHit = true;
+    userShouldPress = false;
+    hasHit = false;
+    gameTime = 0;
+    session = 0;
 }
 
 void partialUpdates() {
