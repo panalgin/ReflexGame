@@ -16,7 +16,10 @@ enum class GameState { None, Pregame, Running, End };
 LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 char brandFirst[LCD_COLS + 1] = "    REFLEX OYUNU    ";
-char brandSecond[LCD_COLS + 1] = "      v: 0.99c      ";
+char brandSecond[LCD_COLS + 1] = "        v1          ";
+char brandThird[LCD_COLS + 1] = "   MUSTAFA CANSIZ   ";
+char brandFourth[LCD_COLS + 1] = "--------------------";
+char brandFifth[LCD_COLS + 1] = "    METIN YALCIN    ";
 
 const uint8_t redPin = 6;
 const uint8_t greenPin = 5;
@@ -107,6 +110,31 @@ void watermark() {
     }
 
     delay(2000);
+    lcd.clear();
+    lcd.home();
+
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 1);
+        lcd.write(brandThird[i]);
+
+        if (brandThird[i] != ' ') delay(75);
+    }
+    
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 2);
+        lcd.write(brandFourth[i]);
+
+        if (brandFourth[i] != ' ') delay(75);
+    }
+
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 3);
+        lcd.write(brandFifth[i]);
+
+        if (brandFifth[i] != ' ') delay(75);
+    }
+
+    delay(3000);
 }
 
 void checkState() {
@@ -202,7 +230,7 @@ void checkInput() {
             if (buttonState == LOW) {
                 canHit = true;  // can re-hit after this
 
-                if (hasHit) {             // was a successfull button press
+                if (hasHit) {  // was a successfull button press
                     if (session == SESSION_RETRIES) {  // finish game
                         endGame();
                     } else {
