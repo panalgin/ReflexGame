@@ -8,6 +8,7 @@
 #define LCD_ROWS 4
 #define LCD_REFRESH_INTERVAL 300
 #define PREGAME_COUNTER 9
+#define SESSION_RETRIES 5
 
 /* #region State Machine */
 enum class GameState { None, Pregame, Running, End };
@@ -202,7 +203,7 @@ void checkInput() {
                 canHit = true;  // can re-hit after this
 
                 if (hasHit) {             // was a successfull button press
-                    if (session == 10) {  // finish game
+                    if (session == SESSION_RETRIES) {  // finish game
                         endGame();
                     } else {
                         hasHit = false;
