@@ -23,7 +23,7 @@ class Settings {
 
     uint8_t Load(void);
     uint8_t Save(void);
-    void Assert(unsigned long avgScore);
+    void Assert(uint16_t avgScore);
 };
 
 #endif

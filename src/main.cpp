@@ -16,11 +16,11 @@ enum class GameState { None, Pregame, Running, End };
 
 LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
-char brandFirst[LCD_COLS + 1] = "    REFLEX OYUNU    ";
-char brandSecond[LCD_COLS + 1] = "        v1          ";
-char brandThird[LCD_COLS + 1] = "   MUSTAFA CANSIZ   ";
-char brandFourth[LCD_COLS + 1] = "--------------------";
-char brandFifth[LCD_COLS + 1] = "    METIN YALCIN    ";
+char brandFirst[LCD_COLS + 1]   = "    REFLEX OYUNU    ";
+char brandSecond[LCD_COLS + 1]  = "        v2.0        ";
+char brandThird[LCD_COLS + 1]   = "   MUSTAFA CANSIZ   ";
+char brandFourth[LCD_COLS + 1]  = "--------------------";
+char brandFifth[LCD_COLS + 1]   = "    METIN YALCIN    ";
 
 const uint8_t redPin = 6;
 const uint8_t greenPin = 5;
@@ -302,21 +302,40 @@ void showScores() {
                                           {"3:                  "}};
 
     if (isFirstPage) {
-        unsigned long first = settings.EepromBlock.Scores[0];
-        unsigned long second = settings.EepromBlock.Scores[1];
-        unsigned long third = settings.EepromBlock.Scores[2];
+        uint16_t first = settings.EepromBlock.Scores[0];
+        uint16_t second = settings.EepromBlock.Scores[1];
+        uint16_t third = settings.EepromBlock.Scores[2];
 
-        sprintf(lines[1], "1: %u ms", (uint16_t)first);
-        sprintf(lines[2], "2: %u ms", (uint16_t)second);
-        sprintf(lines[3], "3: %u ms", (uint16_t)third);
+        if (first != UINT16_MAX)
+            sprintf(lines[1], "1: %u ms", (uint16_t)first);
+        else
+            sprintf(lines[1], "1: %s", "---");
+
+        if (second != UINT16_MAX)
+            sprintf(lines[2], "2: %u ms", (uint16_t)second);
+        else
+            sprintf(lines[2], "2: %s", "---");
+
+        if (third != UINT16_MAX)
+            sprintf(lines[3], "3: %u ms", (uint16_t)third);
+        else
+            sprintf(lines[3], "3: %s", "---");
 
         isFirstPage = false;
     } else {
-        unsigned long fourth = settings.EepromBlock.Scores[3];
-        unsigned long fifth = settings.EepromBlock.Scores[4];
+        uint16_t fourth = settings.EepromBlock.Scores[3];
+        uint16_t fifth = settings.EepromBlock.Scores[4];
 
-        sprintf(lines[1], "4: %u ms", (uint16_t)fourth);
-        sprintf(lines[2], "5: %u ms", (uint16_t)fifth);
+        if (fourth != UINT16_MAX)
+            sprintf(lines[1], "4: %u ms", (uint16_t)fourth);
+        else
+            sprintf(lines[1], "4: %s", "---");
+
+        if (fifth != UINT16_MAX)
+            sprintf(lines[2], "5: %u ms", (uint16_t)fifth);
+        else
+            sprintf(lines[2], "5: %s", "---");
+
         sprintf(lines[3], "%s", "                    ");
 
         isFirstPage = true;
@@ -465,6 +484,9 @@ void resetGame() {
     hasHit = false;
     gameTime = 0;
     session = 0;
+
+    setupTimer1();
+    setupTimer2();
 }
 
 void partialUpdates() {

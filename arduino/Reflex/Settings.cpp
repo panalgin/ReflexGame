@@ -10,11 +10,13 @@ Settings::Settings() {}
 uint8_t Settings::Load(void) {
     EEPROM_readAnything(0, EepromBlock);
 
-    if (strcmp(this->EepromBlock.Version, "123") != 0) {
-        strcpy(this->EepromBlock.Version, "123");
-        this->EepromBlock.Scores[0] = 0;
-        this->EepromBlock.Scores[1] = 0;
-        this->EepromBlock.Scores[2] = 0;
+    if (strcmp(this->EepromBlock.Version, "130") != 0) {
+        strcpy(this->EepromBlock.Version, "130");
+        this->EepromBlock.Scores[0] = UINT16_MAX;
+        this->EepromBlock.Scores[1] = UINT16_MAX;
+        this->EepromBlock.Scores[2] = UINT16_MAX;
+        this->EepromBlock.Scores[3] = UINT16_MAX;
+        this->EepromBlock.Scores[4] = UINT16_MAX;
 
         EEPROM_writeAnything(0, this->EepromBlock);
     }
@@ -36,24 +38,40 @@ uint8_t Settings::Save(void) {
     return 0;
 }
 
-void Settings::Assert(unsigned long avgScore) {
-  for(uint8_t i = 0; i < 3; i++) {
-    unsigned long old = this->EepromBlock.Scores[i];
+int compare(const void* a, const void* b) {
+    int result = 0;
 
-    if (avgScore < old || old == 0) {
-      this->EepromBlock.Scores[i] = avgScore;
-      this->IsModified = true;
+    if (*(uint16_t*)a < *(uint16_t*)b) 
+        result = -1;
+    else if (*(uint16_t*)a == *(uint16_t*)b) 
+        result = 0;
+    else if (*(uint16_t*)a > *(uint16_t*)b) 
+        result = 1;
 
-      if (i == 0) {
-        unsigned long secondOld = this->EepromBlock.Scores[1];
+    return result;
+}
 
-        this->EepromBlock.Scores[1] = old;
-        this->EepromBlock.Scores[2] = secondOld;
-      }
-      else if (i == 1)
-        this->EepromBlock.Scores[2] = old;
+void Settings::Assert(uint16_t avgScore) {
+    uint16_t scores[] = {
+        this->EepromBlock.Scores[0], this->EepromBlock.Scores[1],
+        this->EepromBlock.Scores[2], this->EepromBlock.Scores[3],
+        this->EepromBlock.Scores[4], avgScore};
 
-      break;
+    qsort(scores, 6, sizeof(uint16_t), compare);
+
+    for (uint8_t n = 0; n < 6; n++) {
+        Serial.print(scores[n]);
+        Serial.print(", ");
     }
-  }
+
+    Serial.println("");
+
+    for (uint8_t i = 0; i < 5; i++) {
+        uint16_t old = this->EepromBlock.Scores[i];
+
+        if (scores[i] != old) {
+            this->EepromBlock.Scores[i] = scores[i];
+            this->IsModified = true;
+        }
+    }
 }

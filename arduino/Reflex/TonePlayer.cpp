@@ -93,4 +93,3 @@ void TonePlayer::noTone ()
   *timerRegA_ = 0;
   *timerRegB_ = 0;  
   } // end of TonePlayer::noTone
-
