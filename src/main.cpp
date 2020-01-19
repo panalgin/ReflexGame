@@ -2,6 +2,7 @@
 #include <EepromAnything.h>
 #include <LiquidCrystal_I2C.h>
 #include "Settings.h"
+#include "TonePlayer.h"
 
 #define LCD_I2C_ADDR 0x27
 #define LCD_COLS 20
@@ -25,6 +26,7 @@ const uint8_t redPin = 6;
 const uint8_t greenPin = 5;
 const uint8_t bluePin = 3;
 
+const uint8_t buzzerPin = 9;
 const uint8_t buttonPin = 8;
 
 GameState State;
@@ -44,6 +46,8 @@ unsigned long totalScore = 0;
 bool userShouldPress = false;
 
 volatile uint8_t nextPageTimer = 0;
+TonePlayer tone1(TCCR1A, TCCR1B, OCR1AH, OCR1AL, TCNT1H,
+                 TCNT1L);  // Uno 9th pin
 
 void watermark();
 void checkState();
@@ -62,6 +66,7 @@ void showLed(uint8_t red, uint8_t green, uint8_t blue);
 void endGame();
 void showEnd();
 void resetGame();
+void celebrate();
 
 void setup() {
     Serial.begin(115200);
@@ -73,6 +78,7 @@ void setup() {
     showLed(0, 0, 0);
 
     pinMode(buttonPin, INPUT);
+    pinMode(buzzerPin, OUTPUT);
 
     lcd.init();
     lcd.backlight();
@@ -332,7 +338,7 @@ void showGame() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"Sure: 00:00.000     "},
                                           {"Basma tepki: 0ms    "},
                                           {"En iyi skor: 0ms    "},
-                                          {"Deneme: 1/10        "}};
+                                          {"Deneme: 1/5         "}};
 
     printWithAnimation(lines);
 }
@@ -343,7 +349,7 @@ void showEnd() {
                                           {"Ortalamaniz: 0ms    "},
                                           {"Skorunuz kaydedildi "}};
 
-    unsigned long avgScore = totalScore / 10;
+    uint16_t avgScore = (uint16_t)(totalScore / SESSION_RETRIES);
 
     sprintf(lines[1], "En iyi skor: %ums", (uint16_t)bestScore);
     sprintf(lines[2], "Ortalamaniz: %ums", (uint16_t)avgScore);
@@ -353,15 +359,56 @@ void showEnd() {
     settings.Assert(avgScore);
     settings.Save();
 
-    delay(3000);
-
-    bool isInScoreboard = avgScore > settings.EepromBlock.Scores[4];
+    bool isInScoreboard = avgScore < settings.EepromBlock.Scores[4];
 
     if (isInScoreboard) {
-        //play buzzer
-        //animate
-        //change screen
+        Serial.println("Need to celebrate");
+        celebrate();
+        // play buzzer
+        // animate
+        // change screen
     }
+}
+
+void celebrate() {
+    unsigned long startedAt = millis();
+    unsigned long elapsed = 0;
+    uint8_t buzzerState = 1;
+
+    while (millis() - startedAt < 5000) {
+        elapsed = millis() - startedAt;
+
+        if (elapsed % 200 == 0) {
+            if (buzzerState == HIGH) {
+                tone1.tone(1000);
+                delay(100);
+            } else {
+                tone1.tone(500);
+                delay(100);
+            }
+
+            buzzerState = !buzzerState;
+        }
+
+        if (elapsed % 30 == 0) {
+            uint8_t red = random(0, 255);
+            uint8_t green = random(0, 255);
+            uint8_t blue = random(0, 128);
+
+            showLed(red, green, blue);
+        }
+    }
+
+    uint16_t fadeFrom = 500;
+
+    while (fadeFrom > 0) {
+        tone1.tone(fadeFrom);
+        delay(10);
+
+        fadeFrom -= 10;
+    }
+
+    tone1.noTone();
 }
 
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
@@ -460,7 +507,7 @@ void partialUpdates() {
                 oldSession = session;
                 lcd.setCursor(8, 3);
                 lcd.print(session);
-                lcd.print("/10");
+                lcd.print("/5");
             }
         }
     }

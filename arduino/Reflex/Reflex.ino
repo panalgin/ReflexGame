@@ -8,6 +8,7 @@
 #define LCD_ROWS 4
 #define LCD_REFRESH_INTERVAL 300
 #define PREGAME_COUNTER 9
+#define SESSION_RETRIES 5
 
 /* #region State Machine */
 enum class GameState { None, Pregame, Running, End };
@@ -15,12 +16,16 @@ enum class GameState { None, Pregame, Running, End };
 LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 char brandFirst[LCD_COLS + 1] = "    REFLEX OYUNU    ";
-char brandSecond[LCD_COLS + 1] = "      v: 0.99c      ";
+char brandSecond[LCD_COLS + 1] = "        v1          ";
+char brandThird[LCD_COLS + 1] = "   MUSTAFA CANSIZ   ";
+char brandFourth[LCD_COLS + 1] = "--------------------";
+char brandFifth[LCD_COLS + 1] = "    METIN YALCIN    ";
 
 const uint8_t redPin = 6;
 const uint8_t greenPin = 5;
 const uint8_t bluePin = 3;
 
+const uint8_t buzzerPin = 9;
 const uint8_t buttonPin = 8;
 
 GameState State;
@@ -39,6 +44,8 @@ unsigned long userShouldPressAt = 0;
 unsigned long totalScore = 0;
 bool userShouldPress = false;
 
+volatile uint8_t nextPageTimer = 0;
+
 void watermark();
 void checkState();
 void checkInput();
@@ -56,6 +63,7 @@ void showLed(uint8_t red, uint8_t green, uint8_t blue);
 void endGame();
 void showEnd();
 void resetGame();
+void celebrate();
 
 void setup() {
     Serial.begin(115200);
@@ -67,19 +75,20 @@ void setup() {
     showLed(0, 0, 0);
 
     pinMode(buttonPin, INPUT);
+    pinMode(buzzerPin, OUTPUT);
 
     lcd.init();
     lcd.backlight();
     lcd.clear();
     lcd.setCursor(0, 0);
 
-    setupTimer1();
-    setupTimer2();
-
     watermark();
 
     screenNeedsUpdate = true;
     settings.Load();
+
+    setupTimer1();
+    setupTimer2();
 }
 
 void loop() {
@@ -106,12 +115,38 @@ void watermark() {
     }
 
     delay(2000);
+    lcd.clear();
+    lcd.home();
+
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 1);
+        lcd.write(brandThird[i]);
+
+        if (brandThird[i] != ' ') delay(75);
+    }
+
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 2);
+        lcd.write(brandFourth[i]);
+
+        if (brandFourth[i] != ' ') delay(75);
+    }
+
+    for (uint8_t i = 0; i < LCD_COLS; i++) {
+        lcd.setCursor(i, 3);
+        lcd.write(brandFifth[i]);
+
+        if (brandFifth[i] != ' ') delay(75);
+    }
+
+    delay(3000);
 }
 
 void checkState() {
     switch (State) {
         case GameState::None: {
-            if (screenNeedsUpdate) {
+            if (screenNeedsUpdate || nextPageTimer > 5) {
+                nextPageTimer = 0;
                 showScores();
                 screenNeedsUpdate = false;
             }
@@ -201,8 +236,8 @@ void checkInput() {
             if (buttonState == LOW) {
                 canHit = true;  // can re-hit after this
 
-                if (hasHit) {             // was a successfull button press
-                    if (session == 10) {  // finish game
+                if (hasHit) {  // was a successfull button press
+                    if (session == SESSION_RETRIES) {  // finish game
                         endGame();
                     } else {
                         hasHit = false;
@@ -255,23 +290,34 @@ void checkLed() {
     // c
 }
 
+bool isFirstPage = true;
+
 void showScores() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"   -SKOR TABLOSU-   "},
                                           {"1:                  "},
                                           {"2:                  "},
                                           {"3:                  "}};
 
-    /*sprintf(lines[1], "TIME:       00:%02d:%02d", bombCountdownTime / 60,
-            bombCountdownTime % 60);
-    sprintf(lines[2], "CODE:        %s", bombPassword);*/
+    if (isFirstPage) {
+        unsigned long first = settings.EepromBlock.Scores[0];
+        unsigned long second = settings.EepromBlock.Scores[1];
+        unsigned long third = settings.EepromBlock.Scores[2];
 
-    unsigned long first = settings.EepromBlock.Scores[0];
-    unsigned long second = settings.EepromBlock.Scores[1];
-    unsigned long third = settings.EepromBlock.Scores[2];
+        sprintf(lines[1], "1: %u ms", (uint16_t)first);
+        sprintf(lines[2], "2: %u ms", (uint16_t)second);
+        sprintf(lines[3], "3: %u ms", (uint16_t)third);
 
-    sprintf(lines[1], "1: %u ms", (uint16_t)first);
-    sprintf(lines[2], "2: %u ms", (uint16_t)second);
-    sprintf(lines[3], "3: %u ms", (uint16_t)third);
+        isFirstPage = false;
+    } else {
+        unsigned long fourth = settings.EepromBlock.Scores[3];
+        unsigned long fifth = settings.EepromBlock.Scores[4];
+
+        sprintf(lines[1], "4: %u ms", (uint16_t)fourth);
+        sprintf(lines[2], "5: %u ms", (uint16_t)fifth);
+        sprintf(lines[3], "%s", "                    ");
+
+        isFirstPage = true;
+    }
 
     printWithAnimation(lines);
 }
@@ -289,7 +335,7 @@ void showGame() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"Sure: 00:00.000     "},
                                           {"Basma tepki: 0ms    "},
                                           {"En iyi skor: 0ms    "},
-                                          {"Deneme: 1/10        "}};
+                                          {"Deneme: 1/5         "}};
 
     printWithAnimation(lines);
 }
@@ -300,7 +346,7 @@ void showEnd() {
                                           {"Ortalamaniz: 0ms    "},
                                           {"Skorunuz kaydedildi "}};
 
-    unsigned long avgScore = totalScore / 10;
+    unsigned long avgScore = totalScore / SESSION_RETRIES;
 
     sprintf(lines[1], "En iyi skor: %ums", (uint16_t)bestScore);
     sprintf(lines[2], "Ortalamaniz: %ums", (uint16_t)avgScore);
@@ -310,7 +356,42 @@ void showEnd() {
     settings.Assert(avgScore);
     settings.Save();
 
-    delay(3000);
+    bool isInScoreboard = avgScore > settings.EepromBlock.Scores[4];
+
+    if (isInScoreboard) {
+        Serial.println("Need to celebrate");
+        celebrate();
+        //play buzzer
+        //animate
+        //change screen
+    }
+}
+
+void celebrate() {
+    unsigned long startedAt = millis();
+    unsigned long elapsed = 0;
+    uint8_t buzzerState = 1;
+
+    while(millis() - startedAt < 5000) {
+        elapsed = millis() - startedAt;
+
+        if (elapsed % 200 == 0) {
+            if (buzzerState == HIGH)
+                tone(buzzerPin, 1200, 100);
+            else
+                tone(buzzerPin, 600, 100);
+            
+            buzzerState = !buzzerState;
+        }
+
+        if (elapsed % 50 == 0) {
+            uint8_t red = random(0, 255);
+            uint8_t green = random(0, 255);
+            uint8_t blue = random(0, 255);
+
+            showLed(red, green, blue); 
+        }
+    }
 }
 
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
@@ -409,7 +490,7 @@ void partialUpdates() {
                 oldSession = session;
                 lcd.setCursor(8, 3);
                 lcd.print(session);
-                lcd.print("/10");
+                lcd.print("/5");
             }
         }
     }
@@ -461,6 +542,10 @@ ISR(TIMER1_COMPA_vect) {
     if (State == GameState::Pregame) {
         if (pregameCounter > 0) pregameCounter--;
         if (pregameCounter == 0) startGame();
+    }
+
+    if (State == GameState::None) {
+        nextPageTimer++;
     }
 }
 
