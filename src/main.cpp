@@ -43,6 +43,8 @@ unsigned long userShouldPressAt = 0;
 unsigned long totalScore = 0;
 bool userShouldPress = false;
 
+volatile uint8_t nextPageTimer = 0;
+
 void watermark();
 void checkState();
 void checkInput();
@@ -77,13 +79,13 @@ void setup() {
     lcd.clear();
     lcd.setCursor(0, 0);
 
-    setupTimer1();
-    setupTimer2();
-
     watermark();
 
     screenNeedsUpdate = true;
     settings.Load();
+
+    setupTimer1();
+    setupTimer2();
 }
 
 void loop() {
@@ -119,7 +121,7 @@ void watermark() {
 
         if (brandThird[i] != ' ') delay(75);
     }
-    
+
     for (uint8_t i = 0; i < LCD_COLS; i++) {
         lcd.setCursor(i, 2);
         lcd.write(brandFourth[i]);
@@ -140,7 +142,8 @@ void watermark() {
 void checkState() {
     switch (State) {
         case GameState::None: {
-            if (screenNeedsUpdate) {
+            if (screenNeedsUpdate || nextPageTimer > 5) {
+                nextPageTimer = 0;
                 showScores();
                 screenNeedsUpdate = false;
             }
@@ -284,23 +287,34 @@ void checkLed() {
     // c
 }
 
+bool isFirstPage = true;
+
 void showScores() {
     char lines[LCD_ROWS][LCD_COLS + 1] = {{"   -SKOR TABLOSU-   "},
                                           {"1:                  "},
                                           {"2:                  "},
                                           {"3:                  "}};
 
-    /*sprintf(lines[1], "TIME:       00:%02d:%02d", bombCountdownTime / 60,
-            bombCountdownTime % 60);
-    sprintf(lines[2], "CODE:        %s", bombPassword);*/
+    if (isFirstPage) {
+        unsigned long first = settings.EepromBlock.Scores[0];
+        unsigned long second = settings.EepromBlock.Scores[1];
+        unsigned long third = settings.EepromBlock.Scores[2];
 
-    unsigned long first = settings.EepromBlock.Scores[0];
-    unsigned long second = settings.EepromBlock.Scores[1];
-    unsigned long third = settings.EepromBlock.Scores[2];
+        sprintf(lines[1], "1: %u ms", (uint16_t)first);
+        sprintf(lines[2], "2: %u ms", (uint16_t)second);
+        sprintf(lines[3], "3: %u ms", (uint16_t)third);
 
-    sprintf(lines[1], "1: %u ms", (uint16_t)first);
-    sprintf(lines[2], "2: %u ms", (uint16_t)second);
-    sprintf(lines[3], "3: %u ms", (uint16_t)third);
+        isFirstPage = false;
+    } else {
+        unsigned long fourth = settings.EepromBlock.Scores[3];
+        unsigned long fifth = settings.EepromBlock.Scores[4];
+
+        sprintf(lines[1], "4: %u ms", (uint16_t)fourth);
+        sprintf(lines[2], "5: %u ms", (uint16_t)fifth);
+        sprintf(lines[3], "%s", "                    ");
+
+        isFirstPage = true;
+    }
 
     printWithAnimation(lines);
 }
@@ -340,6 +354,14 @@ void showEnd() {
     settings.Save();
 
     delay(3000);
+
+    bool isInScoreboard = avgScore > settings.EepromBlock.Scores[4];
+
+    if (isInScoreboard) {
+        //play buzzer
+        //animate
+        //change screen
+    }
 }
 
 void printWithAnimation(char bucket[LCD_ROWS][LCD_COLS + 1]) {
@@ -490,6 +512,10 @@ ISR(TIMER1_COMPA_vect) {
     if (State == GameState::Pregame) {
         if (pregameCounter > 0) pregameCounter--;
         if (pregameCounter == 0) startGame();
+    }
+
+    if (State == GameState::None) {
+        nextPageTimer++;
     }
 }
 

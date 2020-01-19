@@ -6,6 +6,6 @@
 
 struct config_t {
     char Version[4];
-    unsigned long Scores[3];
+    unsigned long Scores[5];
 };
 #endif
