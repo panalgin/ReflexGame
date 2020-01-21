@@ -10,8 +10,8 @@ Settings::Settings() {}
 uint8_t Settings::Load(void) {
     EEPROM_readAnything(0, EepromBlock);
 
-    if (strcmp(this->EepromBlock.Version, "130") != 0) {
-        strcpy(this->EepromBlock.Version, "130");
+    if (strcmp(this->EepromBlock.Version, "131") != 0) {
+        strcpy(this->EepromBlock.Version, "131");
         this->EepromBlock.Scores[0] = UINT16_MAX;
         this->EepromBlock.Scores[1] = UINT16_MAX;
         this->EepromBlock.Scores[2] = UINT16_MAX;

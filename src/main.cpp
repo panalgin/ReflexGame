@@ -378,7 +378,7 @@ void showEnd() {
     settings.Assert(avgScore);
     settings.Save();
 
-    bool isInScoreboard = avgScore < settings.EepromBlock.Scores[4];
+    bool isInScoreboard = avgScore < settings.EepromBlock.Scores[2];
 
     if (isInScoreboard) {
         Serial.println("Need to celebrate");
